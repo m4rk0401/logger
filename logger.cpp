@@ -12,19 +12,20 @@
 #include <chrono>
 #include <vector>
 #include <cstdint>
+#include <thread>
+#include <mutex>
 
-#pragma pack(push, 1)  // Force 1-byte packing (disable padding)
+#pragma pack(push, 1)
 struct CanFrame {
-    uint32_t can_id;        // 4 bytes
-    uint64_t timestamp_sec; // 8 bytes
-    uint32_t timestamp_nsec;// 4 bytes
-    uint8_t data[8];        // 8 bytes
-};  // Total: 24 bytes exactly
-#pragma pack(pop)  // Restore default struct packing
+    uint32_t can_id;
+    uint64_t timestamp_sec;
+    uint32_t timestamp_nsec;
+    uint8_t data[8];
+};
+#pragma pack(pop)
 
 int main() {
     std::string filename = "/home/logger/can_data_2.bin";
-
     std::ofstream file(filename, std::ios::binary);
 
     if (!file) {
@@ -61,6 +62,18 @@ int main() {
     std::cout << "Listening on can1..." << std::endl;
 
     int counter = 0;
+    bool running = true;
+    
+    // Start a separate thread to flush the file every 200ms
+    std::mutex file_mutex;
+
+    std::thread flush_thread([&]() {
+        while (running) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            std::lock_guard<std::mutex> lock(file_mutex);
+            file.flush();
+        }
+    });
     
     while (true) {
         ssize_t nbytes = read(sock, &frame, sizeof(struct can_frame));
@@ -72,7 +85,6 @@ int main() {
         CanFrame frame_line;
         frame_line.can_id = frame.can_id;
 
-        // Get current timestamp with nanosecond precision
         auto now = std::chrono::system_clock::now();
         auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
         auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - (seconds * 1'000'000'000LL);
@@ -82,24 +94,16 @@ int main() {
 
         std::copy(std::begin(frame.data), std::end(frame.data), std::begin(frame_line.data));
 
-        // Write binary data
+        std::lock_guard<std::mutex> lock(file_mutex);
         file.write(reinterpret_cast<const char*>(&frame_line), sizeof(CanFrame));
-
-        counter++;
-
-        std::cout << "Counter: " << counter << std::endl;
-
-        if(counter >= 99)
-        {
-            std::cout << "Break while loop" << std::endl;
-            break;
-        }
     }
 
     std::cout << "Received 100 messages. Stop program now..." << std::endl;
-
-    file.close();
     
+    running = false;
+    flush_thread.join();
+    file.close();
     close(sock);
+    
     return EXIT_SUCCESS;
 }
