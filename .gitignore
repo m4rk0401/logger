@@ -1,0 +1,20 @@
+# Exclude compiled executables
+*.exe
+*.out
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+
+# Exclude build directories (if applicable)
+build/
+bin/
+dist/
+
+# Exclude CMake and Makefile artifacts
+CMakeFiles/
+CMakeCache.txt
+Makefile
