@@ -41,7 +41,7 @@ void convert_bin_to_txt(const std::string& bin_filename, const std::string& txt_
 }
 
 int main(int argc, char* argv[]) {
-    std::string file_name = "2025_03_01-23_46_51";
+    std::string file_name = "2025_03_01-23_53_52";
 
     std::string base_path = "/mnt/mmcblk0p3/2025_03_01/";
     std::string bin_file_path = base_path + file_name + ".bin";
