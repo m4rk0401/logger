@@ -14,6 +14,10 @@
 #include <cstdint>
 #include <thread>
 #include <mutex>
+#include <filesystem>
+#include <iomanip>
+
+namespace fs = std::filesystem;
 
 #pragma pack(push, 1)
 struct CanFrame {
@@ -24,15 +28,52 @@ struct CanFrame {
 };
 #pragma pack(pop)
 
-int main() {
-    std::string filename = "/home/logger/can_data_2.bin";
-    std::ofstream file(filename, std::ios::binary);
+std::string getCurrentTimestamp(const std::string& format) {
+    auto now = std::chrono::system_clock::now();
+    auto time_t_now = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_now = *std::localtime(&time_t_now);
+    
+    std::ostringstream oss;
+    oss << std::put_time(&tm_now, format.c_str());
+    return oss.str();
+}
 
+std::string getUniqueFilename(const std::string& directory) {
+    std::string base_filename = getCurrentTimestamp("%Y_%m_%d-%H_%M_%S");
+    std::string filename = directory + "/" + base_filename + ".bin";
+    int counter = 1;
+    
+    while (fs::exists(filename)) {
+        filename = directory + "/" + base_filename + "_" + std::to_string(counter) + ".bin";
+        counter++;
+    }
+    
+    return filename;
+}
+
+int main() {
+    std::string base_path = "/mnt/mmcblk0p3";
+    std::string date_folder = getCurrentTimestamp("%Y_%m_%d");
+    std::string directory = base_path + "/" + date_folder;
+    
+    if (!fs::exists(directory)) {
+        fs::create_directories(directory);
+
+        // Change ownership to xb025 to enable ftp access
+        std::string chownCmd = "sudo chown -R xb025:xb025 " + std::string(directory);
+        if (system(chownCmd.c_str()) != 0) {
+            std::cerr << "Error: chown failed!" << std::endl;
+        }
+    }
+    
+    std::string filename = getUniqueFilename(directory);
+    std::ofstream file(filename, std::ios::binary);
+    
     if (!file) {
         std::cerr << "Error opening file for writing!" << std::endl;
         return EXIT_FAILURE;
     }
-
+    
     struct sockaddr_can addr;
     struct ifreq ifr;
     struct can_frame frame;
@@ -60,11 +101,8 @@ int main() {
     }
     
     std::cout << "Listening on can1..." << std::endl;
-
-    int counter = 0;
-    bool running = true;
     
-    // Start a separate thread to flush the file every 200ms
+    bool running = true;
     std::mutex file_mutex;
 
     std::thread flush_thread([&]() {
@@ -81,24 +119,24 @@ int main() {
             std::cerr << "Error while reading: " << strerror(errno) << std::endl;
             break;
         }
-
+        
         CanFrame frame_line;
         frame_line.can_id = frame.can_id;
-
+        
         auto now = std::chrono::system_clock::now();
         auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
         auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - (seconds * 1'000'000'000LL);
-
+        
         frame_line.timestamp_sec = static_cast<uint64_t>(seconds);
         frame_line.timestamp_nsec = static_cast<uint32_t>(nanoseconds);
-
+        
         std::copy(std::begin(frame.data), std::end(frame.data), std::begin(frame_line.data));
-
+        
         std::lock_guard<std::mutex> lock(file_mutex);
         file.write(reinterpret_cast<const char*>(&frame_line), sizeof(CanFrame));
     }
-
-    std::cout << "Received 100 messages. Stop program now..." << std::endl;
+    
+    std::cout << "Stopping program..." << std::endl;
     
     running = false;
     flush_thread.join();

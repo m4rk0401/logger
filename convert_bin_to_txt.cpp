@@ -41,11 +41,11 @@ void convert_bin_to_txt(const std::string& bin_filename, const std::string& txt_
 }
 
 int main(int argc, char* argv[]) {
-    std::string file_name = "can_data_2";
+    std::string file_name = "2025_03_01-23_46_51";
 
-    std::string base_path = "/home/logger/";
+    std::string base_path = "/mnt/mmcblk0p3/2025_03_01/";
     std::string bin_file_path = base_path + file_name + ".bin";
-    std::string txt_file_path = base_path + file_name + ".txt";
+    std::string txt_file_path = "/home/logger/" + file_name + ".txt";
 
     convert_bin_to_txt(bin_file_path, txt_file_path);
     return 0;
