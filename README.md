@@ -26,3 +26,12 @@ sudo systemctl enable setup-can.service
 sudo systemctl start setup-can.service
 sudo systemctl status setup-can.service
 ```
+
+# Reset Peak CAN USB
+sudo ip link set vcan0 down
+sudo modprobe -r vcan
+
+sudo modprobe peak_usb
+sudo modprobe can
+
+sudo ip link set can0 up type can bitrate 1000000
